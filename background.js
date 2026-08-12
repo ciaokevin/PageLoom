@@ -5,9 +5,21 @@ const MAX_PNG_HEIGHT = 32_700;
 // Keep compact exports below a conservative height so the complete page survives.
 const MAX_WEBP_HEIGHT = 16_000;
 const MAX_CAPTURES = 250; // Avoid endlessly scrolling feeds consuming memory indefinitely.
+const INFINITE_SCROLL_CAPTURES = 50;
 let captureInProgress = false;
+let captureCancelRequested = false;
+let captureProgress = {active: false, message: ''};
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === 'cancel-capture') {
+    captureCancelRequested = true;
+    sendResponse({ok: true, message: 'Cancelling capture…'});
+    return;
+  }
+  if (message?.type === 'get-capture-status') {
+    sendResponse({ok: true, ...captureProgress});
+    return;
+  }
   if (message?.type !== 'capture-full-page') return;
 
   if (captureInProgress) {
@@ -15,12 +27,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
   captureInProgress = true;
+  captureCancelRequested = false;
+  setCaptureProgress(true, 'Preparing capture…');
   captureCurrentPage(message.format)
     .then((messageText) => sendResponse({ok: true, message: messageText}))
     .catch((error) => sendResponse({ok: false, message: error.message}))
-    .finally(() => { captureInProgress = false; });
+    .finally(() => {
+      captureInProgress = false;
+      captureCancelRequested = false;
+      setCaptureProgress(false, '');
+    });
   return true;
 });
+
+function setCaptureProgress(active, message) {
+  captureProgress = {active, message};
+  chrome.runtime.sendMessage({type: 'capture-progress', ...captureProgress}).catch(() => {});
+}
 
 async function captureCurrentPage(format) {
   if (!['png', 'webp', 'pdf'].includes(format)) throw new Error('Unsupported file format.');
@@ -35,6 +58,9 @@ async function captureCurrentPage(format) {
   let metrics;
   const captures = [];
   const hideToken = `full-page-capture-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let infiniteScrollDetected = false;
+  let growthStreak = 0;
+  let partialCapture = false;
 
   try {
     // Do this before measuring: hiding the scrollbar can slightly change viewport width.
@@ -62,6 +88,11 @@ async function captureCurrentPage(format) {
     let previousY = -1;
     let reachedBottomOnce = false;
     while (targetY !== previousY || !reachedBottomOnce) {
+      if (captureCancelRequested) throw new Error('Capture cancelled.');
+      if (infiniteScrollDetected && captures.length >= INFINITE_SCROLL_CAPTURES) {
+        partialCapture = true;
+        break;
+      }
       if (captures.length >= MAX_CAPTURES) {
         throw new Error('The page kept growing, so the capture stopped. For infinite-scroll pages, load only the content you need and try again.');
       }
@@ -74,6 +105,7 @@ async function captureCurrentPage(format) {
 
       const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {format: 'png'});
       if (!captures.length || captures.at(-1).y !== actualY) captures.push({y: actualY, dataUrl});
+      setCaptureProgress(true, `Capturing section ${captures.length}${infiniteScrollDetected ? ` of ${INFINITE_SCROLL_CAPTURES}` : ''}…`);
 
       // Keep navigation visible at the top of the exported page, then prevent repetition.
       if (captures.length === 1) {
@@ -90,9 +122,12 @@ async function captureCurrentPage(format) {
       // Infinite/lazy pages may grow while we scroll; refresh its real height.
       // Give lazy-rendered footers one extra layout turn before deciding that we are done.
       await new Promise((resolve) => setTimeout(resolve, CAPTURE_DELAY_MS));
+      if (captureCancelRequested) throw new Error('Capture cancelled.');
       const currentHeight = await runInTab(tab.id, () => Math.max(
         document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0,
       ));
+      growthStreak = currentHeight > metrics.height + 20 ? growthStreak + 1 : 0;
+      if (growthStreak >= 3) infiniteScrollDetected = true;
       metrics.height = Math.max(metrics.height, currentHeight);
       targetY = Math.min(actualY + metrics.viewportHeight, Math.max(0, metrics.height - metrics.viewportHeight));
       reachedBottomOnce = targetY === actualY;
@@ -112,10 +147,14 @@ async function captureCurrentPage(format) {
 
   if (format === 'png' || format === 'webp') {
     await downloadImage(captures, metrics, tab.title, format);
-    return `${format.toUpperCase()} downloaded.`;
+    return partialCapture
+      ? `${format.toUpperCase()} downloaded (first ${INFINITE_SCROLL_CAPTURES} loaded sections).`
+      : `${format.toUpperCase()} downloaded.`;
   }
   await downloadPdf(captures, metrics, tab.title);
-  return 'PDF downloaded.';
+  return partialCapture
+    ? `PDF downloaded (first ${INFINITE_SCROLL_CAPTURES} loaded sections).`
+    : 'PDF downloaded.';
 }
 
 async function runInTab(tabId, func, args = []) {

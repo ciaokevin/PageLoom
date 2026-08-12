@@ -97,6 +97,21 @@ h1 {
 
 .format-card:disabled { cursor: wait; opacity: .54; transform: none; }
 
+.cancel {
+  width: 100%;
+  margin-top: 7px;
+  padding: 7px;
+  border: 1px solid rgba(255, 143, 159, .46);
+  border-radius: 8px;
+  background: transparent;
+  color: #ffadb8;
+  cursor: pointer;
+  font: 600 10px/1.2 inherit;
+}
+
+.cancel:hover { background: rgba(188, 69, 86, .14); }
+.cancel:disabled { cursor: wait; opacity: .55; }
+
 #status {
   min-height: 16px;
   margin: 11px 1px 0;
