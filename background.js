@@ -1,6 +1,9 @@
 const CAPTURE_DELAY_MS = 550; // Chrome permits at most two visible-tab captures per second.
 // Chromium caps a canvas dimension near 32,767 px. Keep a small buffer for rounding.
 const MAX_PNG_HEIGHT = 32_700;
+// WebP encoders can silently truncate very tall canvases on some Chromium builds.
+// Keep compact exports below a conservative height so the complete page survives.
+const MAX_WEBP_HEIGHT = 16_000;
 const MAX_CAPTURES = 250; // Avoid endlessly scrolling feeds consuming memory indefinitely.
 let captureInProgress = false;
 
@@ -20,7 +23,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function captureCurrentPage(format) {
-  if (!['png', 'pdf'].includes(format)) throw new Error('Unsupported file format.');
+  if (!['png', 'webp', 'pdf'].includes(format)) throw new Error('Unsupported file format.');
 
   const [tab] = await chrome.tabs.query({active: true, lastFocusedWindow: true});
   if (!tab?.id || tab.windowId === undefined) throw new Error('Could not find a tab to capture.');
@@ -107,9 +110,9 @@ async function captureCurrentPage(format) {
     } catch { /* tab navigated */ }
   }
 
-  if (format === 'png') {
-    const fileCount = await downloadPng(captures, metrics, tab.title);
-    return fileCount === 1 ? 'PNG downloaded.' : `${fileCount} PNG files downloaded.`;
+  if (format === 'png' || format === 'webp') {
+    await downloadImage(captures, metrics, tab.title, format);
+    return `${format.toUpperCase()} downloaded.`;
   }
   await downloadPdf(captures, metrics, tab.title);
   return 'PDF downloaded.';
@@ -125,7 +128,7 @@ async function decodeImage(dataUrl) {
   return createImageBitmap(blob);
 }
 
-async function downloadPng(captures, metrics, title) {
+async function downloadImage(captures, metrics, title, format) {
   const first = await decodeImage(captures[0].dataUrl);
   const scale = first.width / metrics.viewportWidth;
   // Keep the document's exact height. Captures are positioned using their real scroll
@@ -134,7 +137,8 @@ async function downloadPng(captures, metrics, title) {
   const baseName = safeFileName(title || 'full-page');
   // A PNG must be a single canvas. Downscale only when the page exceeds Chromium's
   // maximum canvas height; PDF remains available when the original resolution matters.
-  const outputScale = Math.min(1, MAX_PNG_HEIGHT / totalHeight);
+  const maximumHeight = format === 'webp' ? MAX_WEBP_HEIGHT : MAX_PNG_HEIGHT;
+  const outputScale = Math.min(1, maximumHeight / totalHeight);
   const outputWidth = Math.max(1, Math.round(first.width * outputScale));
   const outputHeight = Math.max(1, Math.round(totalHeight * outputScale));
 
@@ -150,12 +154,13 @@ async function downloadPng(captures, metrics, title) {
       }
       if (image !== first) image.close();
     }
-    const dataUrl = await blobToDataUrl(await canvas.convertToBlob({type: 'image/png'}));
-    await chrome.downloads.download({url: dataUrl, filename: `${baseName}.png`, saveAs: false});
+    const type = format === 'webp' ? 'image/webp' : 'image/png';
+    const options = format === 'webp' ? {type, quality: 0.82} : {type};
+    const dataUrl = await blobToDataUrl(await canvas.convertToBlob(options));
+    await chrome.downloads.download({url: dataUrl, filename: `${baseName}.${format}`, saveAs: false});
   } finally {
     first.close();
   }
-  return 1;
 }
 
 async function downloadPdf(captures, metrics, title) {
@@ -179,7 +184,7 @@ async function downloadPdf(captures, metrics, title) {
       }
       if (image !== first) image.close();
     }
-    jpeg = new Uint8Array(await (await canvas.convertToBlob({type: 'image/jpeg', quality: 0.92})).arrayBuffer());
+    jpeg = new Uint8Array(await (await canvas.convertToBlob({type: 'image/jpeg', quality: 0.85})).arrayBuffer());
   } finally {
     first.close();
   }

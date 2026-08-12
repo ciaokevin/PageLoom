@@ -17,6 +17,7 @@ for (const button of buttons) {
       });
       if (!result?.ok) throw new Error(result?.message || 'The capture could not be started.');
       setStatus(result.message, 'success');
+      buttons.forEach((item) => { item.disabled = false; });
     } catch (error) {
       setStatus(`Failed: ${error.message}`, 'error');
       buttons.forEach((item) => { item.disabled = false; });

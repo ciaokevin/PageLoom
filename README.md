@@ -30,15 +30,15 @@
 
 PageLoom scrolls through the active tab, stitches every viewport together, and downloads the result as one continuous image or document. No account, analytics, or cloud processing required.
 
-| PNG image | PDF document |
-| --- | --- |
-| Best for sharing, design review, and image archives. | Best for a portable, single-page record of a long page. |
-| Downloaded as one complete PNG. | Downloaded as one continuous PDF page. |
+| PNG image | WebP image | PDF document |
+| --- | --- | --- |
+| Lossless quality for design review and archival. | Compact image output with excellent visual quality. | A portable, single-page record of a long page. |
+| Largest file size. | Best choice when file size matters. | JPEG-compressed to balance quality and size. |
 
 ## Features
 
 - **Full-page capture** — captures the entire active page, not only what is visible.
-- **Two output formats** — download a single PNG image or a single continuous PDF page.
+- **Three output formats** — download a lossless PNG, a compact WebP image, or a single continuous PDF page.
 - **Clean stitching** — keeps the header in the first viewport while preventing fixed and sticky UI from repeating further down.
 - **Footer-aware** — waits for lazy-loaded content and page footers before completing the capture.
 - **State restoration** — restores scrollbars, fixed UI, and the original scroll position after capture.
@@ -51,7 +51,7 @@ PageLoom scrolls through the active tab, stitches every viewport together, and d
 2. Open `chrome://extensions` in Chrome.
 3. Enable **Developer mode** in the top-right corner.
 4. Click **Load unpacked** and select the folder containing `manifest.json`.
-5. Open a page, click the PageLoom extension icon, then choose **PNG image** or **PDF document**.
+5. Open a page, click the PageLoom extension icon, then choose **PNG image**, **WebP image**, or **PDF document**.
 
 After editing the source, use the reload button on PageLoom's extension card in `chrome://extensions`.
 
@@ -71,7 +71,7 @@ Restore the page and download one PNG or PDF
 
 ## Long pages
 
-Browsers impose maximum canvas and PDF page dimensions. For exceptionally tall pages, PageLoom proportionally downscales the final result to keep every part of the page in one output image or PDF page. It does not intentionally split a capture into multiple files or PDF pages.
+Browsers impose maximum canvas and PDF page dimensions. For exceptionally tall pages, PageLoom proportionally downscales the final result to keep every part of the page in one output image or PDF page. It does not intentionally split a capture into multiple files or PDF pages. WebP uses a more conservative maximum height than PNG to ensure reliable full-page encoding while keeping file sizes small.
 
 ## Permissions
 

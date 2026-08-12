@@ -73,9 +73,14 @@ h1 {
 }
 
 .pdf-card { background: rgba(28, 36, 53, .78); }
+.webp-card {
+  border-color: rgba(83, 207, 174, .42);
+  background: linear-gradient(135deg, rgba(31, 101, 105, .7), rgba(25, 67, 82, .76));
+}
 
 .format-card:hover { border-color: #96a6ff; transform: translateY(-1px); }
 .pdf-card:hover { background: #273148; }
+.webp-card:hover { border-color: #72e0bd; background: linear-gradient(135deg, rgba(37, 117, 117, .82), rgba(28, 79, 92, .85)); }
 
 .format-icon {
   color: #dce4ff;
