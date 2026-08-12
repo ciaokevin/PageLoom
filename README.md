@@ -26,6 +26,10 @@
 
 ---
 
+<p align="center">
+  <img src="images/pageloom-popup.png" width="288" alt="PageLoom popup showing PNG, WebP, and PDF capture options">
+</p>
+
 ## Capture the whole story
 
 PageLoom scrolls through the active tab, stitches every viewport together, and downloads the result as one continuous image or document. No account, analytics, or cloud processing required.
