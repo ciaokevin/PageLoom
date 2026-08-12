@@ -157,10 +157,11 @@ async function captureCurrentPage(format) {
   }
 
   if (format === 'png' || format === 'webp') {
-    await downloadImage(captures, metrics, tab.title, format);
+    const fileCount = await downloadImage(captures, metrics, tab.title, format);
+    const fileMessage = fileCount > 1 ? `${fileCount} ${format.toUpperCase()} files downloaded` : `${format.toUpperCase()} downloaded`;
     return partialCapture
-      ? `${format.toUpperCase()} downloaded (first ${MAX_CAPTURED_SECTIONS} loaded sections).`
-      : `${format.toUpperCase()} downloaded.`;
+      ? `${fileMessage} (first ${MAX_CAPTURED_SECTIONS} loaded sections).`
+      : `${fileMessage}.`;
   }
   await downloadPdf(captures, metrics, tab.title);
   return partialCapture
@@ -181,10 +182,38 @@ async function decodeImage(dataUrl) {
 async function downloadImage(captures, metrics, title, format) {
   const first = await decodeImage(captures[0].dataUrl);
   const scale = first.width / metrics.viewportWidth;
-  // Keep the document's exact height. Captures are positioned using their real scroll
-  // offsets, so the final tile is cropped precisely at the bottom of the page.
-  const totalHeight = Math.ceil(metrics.height * scale);
+  // Virtualized feeds can report a scrollHeight far beyond the content actually rendered.
+  // Never downscale a capture to accommodate unvisited virtual space: use the real extent
+  // of the screenshots we collected, capped at the document height for ordinary pages.
+  const totalHeight = getCapturedPixelHeight(captures, metrics, scale, first.height);
   const baseName = safeFileName(title || 'full-page');
+
+  if (format === 'webp') {
+    // Do not shrink text-heavy captures to force them into one tall WebP. Instead,
+    // export native-resolution segments whenever the browser canvas limit is reached.
+    const chunks = Math.ceil(totalHeight / MAX_PNG_HEIGHT);
+    try {
+      for (let index = 0; index < chunks; index += 1) {
+        const start = index * MAX_PNG_HEIGHT;
+        const height = Math.min(MAX_PNG_HEIGHT, totalHeight - start);
+        const canvas = new OffscreenCanvas(first.width, height);
+        const context = canvas.getContext('2d');
+        for (const capture of captures) {
+          const image = capture === captures[0] ? first : await decodeImage(capture.dataUrl);
+          const y = Math.round(capture.y * scale) - start;
+          if (y < height && y + image.height > 0) context.drawImage(image, 0, y);
+          if (image !== first) image.close();
+        }
+        const dataUrl = await blobToDataUrl(await canvas.convertToBlob({type: 'image/webp', quality: 0.92}));
+        const suffix = chunks > 1 ? `-${index + 1}` : '';
+        await chrome.downloads.download({url: dataUrl, filename: `${baseName}${suffix}.webp`, saveAs: false});
+      }
+    } finally {
+      first.close();
+    }
+    return chunks;
+  }
+
   // A PNG must be a single canvas. Downscale only when the page exceeds Chromium's
   // maximum canvas height; PDF remains available when the original resolution matters.
   const outputScale = Math.min(1, MAX_PNG_HEIGHT / totalHeight);
@@ -203,20 +232,18 @@ async function downloadImage(captures, metrics, title, format) {
       }
       if (image !== first) image.close();
     }
-    const type = format === 'webp' ? 'image/webp' : 'image/png';
-    // Keep WebP visibly sharp for text-heavy pages while still being far smaller than PNG.
-    const options = format === 'webp' ? {type, quality: 0.92} : {type};
-    const dataUrl = await blobToDataUrl(await canvas.convertToBlob(options));
+    const dataUrl = await blobToDataUrl(await canvas.convertToBlob({type: 'image/png'}));
     await chrome.downloads.download({url: dataUrl, filename: `${baseName}.${format}`, saveAs: false});
   } finally {
     first.close();
   }
+  return 1;
 }
 
 async function downloadPdf(captures, metrics, title) {
   const first = await decodeImage(captures[0].dataUrl);
   const scale = first.width / metrics.viewportWidth;
-  const fullHeight = Math.ceil(metrics.height * scale);
+  const fullHeight = getCapturedPixelHeight(captures, metrics, scale, first.height);
   const outputScale = Math.min(1, MAX_PNG_HEIGHT / fullHeight);
   const outputWidth = Math.max(1, Math.round(first.width * outputScale));
   const outputHeight = Math.max(1, Math.round(fullHeight * outputScale));
@@ -291,4 +318,10 @@ function blobToDataUrl(blob) {
 
 function safeFileName(value) {
   return value.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 100) || 'full-page';
+}
+
+function getCapturedPixelHeight(captures, metrics, scale, tileHeight) {
+  const lastCapture = captures.at(-1);
+  const capturedDocumentHeight = lastCapture.y + tileHeight / scale;
+  return Math.max(1, Math.ceil(Math.min(metrics.height, capturedDocumentHeight) * scale));
 }

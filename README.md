@@ -36,13 +36,13 @@ PageLoom scrolls through the active tab, stitches every viewport together, and d
 
 | PNG image | WebP image | PDF document |
 | --- | --- | --- |
-| Lossless quality for design review and archival. | Compact image output with excellent visual quality. | A portable, single-page record of a long page. |
-| Largest file size. | Best choice when file size matters. | JPEG-compressed to balance quality and size. |
+| Lossless quality for design review and archival. | Sharp, compact output for long text-heavy pages. | A portable, single-page record of a long page. |
+| Largest file size. | Very long pages are split into native-resolution WebP files. | JPEG-compressed to balance quality and size. |
 
 ## Features
 
 - **Full-page capture** — captures the entire active page, not only what is visible.
-- **Three output formats** — download a lossless PNG, a compact WebP image, or a single continuous PDF page.
+- **Three output formats** — download a lossless PNG, sharp native-resolution WebP segments, or a single continuous PDF page.
 - **Clean stitching** — keeps the header in the first viewport while preventing fixed and sticky UI from repeating further down.
 - **Footer-aware** — waits for lazy-loaded content and page footers before completing the capture.
 - **State restoration** — restores scrollbars, fixed UI, and the original scroll position after capture.
@@ -75,7 +75,7 @@ Restore the page and download one PNG or PDF
 
 ## Long pages
 
-Browsers impose maximum canvas and PDF page dimensions. For exceptionally tall pages, PageLoom proportionally downscales the final result to keep every part of the page in one output image or PDF page. It does not intentionally split a capture into multiple files or PDF pages. WebP uses high-quality compression to reduce file size while keeping text sharp.
+Browsers impose maximum canvas and PDF page dimensions. PNG and PDF are proportionally downscaled when necessary to stay in one output file/page. WebP preserves native text sharpness by splitting exceptionally tall pages into numbered WebP files instead of downscaling them.
 
 ## Permissions
 
