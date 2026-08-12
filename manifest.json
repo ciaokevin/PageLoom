@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Full Page Capture",
+  "description": "Capture the current web page as a PNG image or PDF, entirely locally.",
+  "version": "1.0.0",
+  "permissions": ["activeTab", "scripting", "downloads"],
+  "action": {
+    "default_title": "Full Page Capture",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}
