@@ -79,4 +79,4 @@ popup.js        Popup interaction logic
 
 ## License
 
-Add a license file that matches how you want to distribute this project before publishing it.
+This project is licensed under the [MIT License](LICENSE).
