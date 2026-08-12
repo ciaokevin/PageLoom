@@ -5,6 +5,7 @@ const MAX_PNG_HEIGHT = 32_700;
 // Pages longer than this are exported as their currently loaded portion.
 const MAX_CAPTURED_SECTIONS = 50;
 const BOTTOM_SETTLE_DELAY_MS = 1_200;
+const MAX_BOTTOM_LOAD_RETRIES = 5;
 let captureInProgress = false;
 let captureCancelRequested = false;
 let captureProgress = {active: false, message: ''};
@@ -58,6 +59,7 @@ async function captureCurrentPage(format) {
   const captures = [];
   const hideToken = `full-page-capture-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let partialCapture = false;
+  let bottomLoadRetries = 0;
 
   try {
     // Do this before measuring: hiding the scrollbar can slightly change viewport width.
@@ -118,7 +120,14 @@ async function captureCurrentPage(format) {
       const wasAtBottom = actualY >= Math.max(0, metrics.height - metrics.viewportHeight);
       if (wasAtBottom) {
         setCaptureProgress(true, 'Loading more content…');
-        await new Promise((resolve) => setTimeout(resolve, BOTTOM_SETTLE_DELAY_MS));
+        // Some virtualized feeds only request their next batch after a fresh scroll event
+        // at the boundary. Nudge the viewport and return to the bottom to trigger it.
+        await runInTab(tab.id, async (y, delay) => {
+          window.scrollTo(0, Math.max(0, y - 2));
+          await new Promise((resolve) => setTimeout(resolve, 80));
+          window.scrollTo(0, y);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }, [actualY, BOTTOM_SETTLE_DELAY_MS]);
       }
 
       // Infinite/lazy pages may grow while we scroll; refresh their real height.
@@ -126,9 +135,13 @@ async function captureCurrentPage(format) {
       const currentHeight = await runInTab(tab.id, () => Math.max(
         document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0,
       ));
+      const loadedMoreContent = currentHeight > metrics.height + 20;
+      bottomLoadRetries = wasAtBottom && !loadedMoreContent ? bottomLoadRetries + 1 : 0;
       metrics.height = Math.max(metrics.height, currentHeight);
       targetY = Math.min(actualY + metrics.viewportHeight, Math.max(0, metrics.height - metrics.viewportHeight));
-      reachedBottomOnce = targetY === actualY;
+      // Do not stop at the first apparent bottom: dynamic feeds need a few chances to
+      // append their next batch. Static pages still finish after the retry window.
+      reachedBottomOnce = targetY === actualY && bottomLoadRetries >= MAX_BOTTOM_LOAD_RETRIES;
     }
   } finally {
     // Never leave the user at the bottom of their page, including after a failure.
