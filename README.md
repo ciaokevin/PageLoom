@@ -1,78 +1,109 @@
-# PageLoom
+<p align="center">
+  <img src="icons/icon128.png" width="112" alt="PageLoom icon">
+</p>
 
-A lightweight Chrome extension that captures the entire current web page and downloads it as a single **PNG** or **PDF** file.
+<h1 align="center">P A G E L O O M</h1>
 
-All capture, image processing, and file generation happen locally in the browser. Nothing is uploaded to an external service.
+<p align="center"><strong>Capture every scroll. Keep every detail.</strong></p>
+
+<p align="center">
+  A lightweight Chrome extension that saves the complete current web page as one continuous PNG or PDF.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Chrome-Extension-4285F4?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome Extension">
+  <img src="https://img.shields.io/badge/Manifest-V3-667CF7?style=flat-square" alt="Manifest V3">
+  <img src="https://img.shields.io/badge/Privacy-Local%20only-72C69C?style=flat-square" alt="Local processing only">
+  <img src="https://img.shields.io/badge/license-MIT-F4B942?style=flat-square" alt="MIT License">
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#privacy">Privacy</a>
+</p>
+
+---
+
+## Capture the whole story
+
+PageLoom scrolls through the active tab, stitches every viewport together, and downloads the result as one continuous image or document. No account, analytics, or cloud processing required.
+
+| PNG image | PDF document |
+| --- | --- |
+| Best for sharing, design review, and image archives. | Best for a portable, single-page record of a long page. |
+| Downloaded as one complete PNG. | Downloaded as one continuous PDF page. |
 
 ## Features
 
-- Capture the full height of the active web page, not just the visible viewport.
-- Download the result as a single PNG image.
-- Download the result as a single, continuous PDF page.
-- Preserve the page header in the first captured section while preventing fixed or sticky UI from repeating further down the image.
-- Hide scrollbars during capture and restore them afterward.
-- Restore the original scroll position when the capture finishes or fails.
-- Wait for lazy-loaded content and page footers before completing the capture.
-- Prevent duplicate captures while a capture is already running.
-- Use a compact, dark English-language popup interface.
-- Save files to Chrome's normal download location without requesting an additional file picker from the extension.
+- **Full-page capture** — captures the entire active page, not only what is visible.
+- **Two output formats** — download a single PNG image or a single continuous PDF page.
+- **Clean stitching** — keeps the header in the first viewport while preventing fixed and sticky UI from repeating further down.
+- **Footer-aware** — waits for lazy-loaded content and page footers before completing the capture.
+- **State restoration** — restores scrollbars, fixed UI, and the original scroll position after capture.
+- **Local by design** — capture, stitching, and file generation occur entirely in Chrome.
+- **Duplicate protection** — prevents a second capture from starting while one is already running.
 
-## Install locally
+## Install
 
-1. Download or clone this repository.
+1. Clone or download this repository.
 2. Open `chrome://extensions` in Chrome.
-3. Turn on **Developer mode** in the top-right corner.
-4. Click **Load unpacked**.
-5. Select the folder that contains `manifest.json`.
-6. Open a page, click the extension icon, and choose **Download PNG** or **Download PDF**.
+3. Enable **Developer mode** in the top-right corner.
+4. Click **Load unpacked** and select the folder containing `manifest.json`.
+5. Open a page, click the PageLoom extension icon, then choose **PNG image** or **PDF document**.
 
-After changing source files, click the reload button on the extension card in `chrome://extensions`.
+After editing the source, use the reload button on PageLoom's extension card in `chrome://extensions`.
 
 ## How it works
 
-1. The extension temporarily hides the page scrollbar.
-2. It captures the first viewport with the header intact.
-3. It hides fixed and sticky interface elements, then scrolls and captures the rest of the page.
-4. It stitches the captured viewports into one continuous document.
-5. It restores the page's original interface and scroll position.
-6. It downloads the assembled PNG or PDF locally.
+```text
+Open PageLoom
+      ↓
+Capture the first viewport with its header
+      ↓
+Hide repeating fixed/sticky UI and scrollbars
+      ↓
+Capture and stitch the remaining viewports
+      ↓
+Restore the page and download one PNG or PDF
+```
 
 ## Long pages
 
-Browsers have a maximum canvas size. For exceptionally tall pages, the extension proportionally reduces the final output resolution so that PNG and PDF can still be exported as one complete image/page. No content is intentionally split into separate output files or PDF pages.
-
-For the sharpest result on unusually long documents, use the PDF option.
+Browsers impose maximum canvas and PDF page dimensions. For exceptionally tall pages, PageLoom proportionally downscales the final result to keep every part of the page in one output image or PDF page. It does not intentionally split a capture into multiple files or PDF pages.
 
 ## Permissions
 
-| Permission | Why it is needed |
+| Permission | Purpose |
 | --- | --- |
-| `activeTab` | Access only the tab the user explicitly invokes the extension on. |
-| `scripting` | Measure and scroll the page, and temporarily hide repeated UI elements. |
-| `downloads` | Save the generated PNG or PDF to the local Downloads folder. |
+| `activeTab` | Accesses only the tab where the user explicitly invokes PageLoom. |
+| `scripting` | Measures and scrolls the page, then temporarily hides repeated UI. |
+| `downloads` | Saves the generated PNG or PDF through Chrome's download system. |
 
-The extension does not request broad host permissions such as `<all_urls>`.
+PageLoom does not request broad host permissions such as `<all_urls>`.
 
 ## Privacy
 
-- No analytics, tracking, authentication, or external API calls.
-- No page content, screenshots, URLs, or browsing history are transmitted off the device.
-- Processing occurs locally in Chrome and the final file is saved through Chrome's download system.
+**Your page stays on your device.**
+
+- No analytics, tracking, sign-in, or external API calls.
+- No page content, screenshots, URLs, or browsing history are uploaded or shared.
+- All processing happens locally in Chrome before the final file is saved.
 
 ## Limitations
 
 - Chrome internal pages such as `chrome://`, the Chrome Web Store, and some protected pages cannot be captured due to browser security restrictions.
-- Page content that changes continuously during capture may not align perfectly.
-- Infinite-scroll pages are limited to 250 viewport captures to avoid an endless operation.
-- Fixed/sticky UI detected after the first viewport is hidden during the remaining capture. This prevents repeated navigation bars, chat widgets, and similar controls.
-- Chrome's own download setting **Ask where to save each file before downloading** can still show a system save dialog. Disable it in `chrome://settings/downloads` for automatic saving.
+- Continuously changing page content can affect capture alignment.
+- Infinite-scroll pages stop after 250 viewports to prevent endless capture.
+- Chrome's **Ask where to save each file before downloading** setting may still show a system save dialog. Disable it in `chrome://settings/downloads` for automatic saving.
 
-## Project files
+## Project structure
 
 ```text
 manifest.json   Extension manifest and permissions
 background.js   Capture, stitching, PDF generation, and download logic
-popup.html      Extension popup markup
+popup.html      Popup markup
 popup.css       Popup styling
 popup.js        Popup interaction logic
 icons/          PageLoom browser and store icons
@@ -80,4 +111,4 @@ icons/          PageLoom browser and store icons
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+Released under the [MIT License](LICENSE).
