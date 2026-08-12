@@ -1,9 +1,6 @@
 const CAPTURE_DELAY_MS = 550; // Chrome permits at most two visible-tab captures per second.
 // Chromium caps a canvas dimension near 32,767 px. Keep a small buffer for rounding.
 const MAX_PNG_HEIGHT = 32_700;
-// WebP encoders can silently truncate very tall canvases on some Chromium builds.
-// Keep compact exports below a conservative height so the complete page survives.
-const MAX_WEBP_HEIGHT = 16_000;
 // A hard cap keeps infinite or virtualized feeds (such as social timelines) responsive.
 // Pages longer than this are exported as their currently loaded portion.
 const MAX_CAPTURED_SECTIONS = 50;
@@ -177,8 +174,7 @@ async function downloadImage(captures, metrics, title, format) {
   const baseName = safeFileName(title || 'full-page');
   // A PNG must be a single canvas. Downscale only when the page exceeds Chromium's
   // maximum canvas height; PDF remains available when the original resolution matters.
-  const maximumHeight = format === 'webp' ? MAX_WEBP_HEIGHT : MAX_PNG_HEIGHT;
-  const outputScale = Math.min(1, maximumHeight / totalHeight);
+  const outputScale = Math.min(1, MAX_PNG_HEIGHT / totalHeight);
   const outputWidth = Math.max(1, Math.round(first.width * outputScale));
   const outputHeight = Math.max(1, Math.round(totalHeight * outputScale));
 
@@ -195,7 +191,8 @@ async function downloadImage(captures, metrics, title, format) {
       if (image !== first) image.close();
     }
     const type = format === 'webp' ? 'image/webp' : 'image/png';
-    const options = format === 'webp' ? {type, quality: 0.82} : {type};
+    // Keep WebP visibly sharp for text-heavy pages while still being far smaller than PNG.
+    const options = format === 'webp' ? {type, quality: 0.92} : {type};
     const dataUrl = await blobToDataUrl(await canvas.convertToBlob(options));
     await chrome.downloads.download({url: dataUrl, filename: `${baseName}.${format}`, saveAs: false});
   } finally {

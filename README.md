@@ -75,7 +75,7 @@ Restore the page and download one PNG or PDF
 
 ## Long pages
 
-Browsers impose maximum canvas and PDF page dimensions. For exceptionally tall pages, PageLoom proportionally downscales the final result to keep every part of the page in one output image or PDF page. It does not intentionally split a capture into multiple files or PDF pages. WebP uses a more conservative maximum height than PNG to ensure reliable full-page encoding while keeping file sizes small.
+Browsers impose maximum canvas and PDF page dimensions. For exceptionally tall pages, PageLoom proportionally downscales the final result to keep every part of the page in one output image or PDF page. It does not intentionally split a capture into multiple files or PDF pages. WebP uses high-quality compression to reduce file size while keeping text sharp.
 
 ## Permissions
 
