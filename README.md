@@ -1,4 +1,4 @@
-# Full Page Capture
+# PageLoom
 
 A lightweight Chrome extension that captures the entire current web page and downloads it as a single **PNG** or **PDF** file.
 
@@ -75,6 +75,7 @@ background.js   Capture, stitching, PDF generation, and download logic
 popup.html      Extension popup markup
 popup.css       Popup styling
 popup.js        Popup interaction logic
+icons/          PageLoom browser and store icons
 ```
 
 ## License
