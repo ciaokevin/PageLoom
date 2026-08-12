@@ -4,8 +4,9 @@ const MAX_PNG_HEIGHT = 32_700;
 // WebP encoders can silently truncate very tall canvases on some Chromium builds.
 // Keep compact exports below a conservative height so the complete page survives.
 const MAX_WEBP_HEIGHT = 16_000;
-const MAX_CAPTURES = 250; // Avoid endlessly scrolling feeds consuming memory indefinitely.
-const INFINITE_SCROLL_CAPTURES = 50;
+// A hard cap keeps infinite or virtualized feeds (such as social timelines) responsive.
+// Pages longer than this are exported as their currently loaded portion.
+const MAX_CAPTURED_SECTIONS = 50;
 let captureInProgress = false;
 let captureCancelRequested = false;
 let captureProgress = {active: false, message: ''};
@@ -58,8 +59,6 @@ async function captureCurrentPage(format) {
   let metrics;
   const captures = [];
   const hideToken = `full-page-capture-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  let infiniteScrollDetected = false;
-  let growthStreak = 0;
   let partialCapture = false;
 
   try {
@@ -89,12 +88,9 @@ async function captureCurrentPage(format) {
     let reachedBottomOnce = false;
     while (targetY !== previousY || !reachedBottomOnce) {
       if (captureCancelRequested) throw new Error('Capture cancelled.');
-      if (infiniteScrollDetected && captures.length >= INFINITE_SCROLL_CAPTURES) {
+      if (captures.length >= MAX_CAPTURED_SECTIONS) {
         partialCapture = true;
         break;
-      }
-      if (captures.length >= MAX_CAPTURES) {
-        throw new Error('The page kept growing, so the capture stopped. For infinite-scroll pages, load only the content you need and try again.');
       }
       previousY = targetY;
       const actualY = await runInTab(tab.id, async (y, delay) => {
@@ -105,7 +101,7 @@ async function captureCurrentPage(format) {
 
       const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {format: 'png'});
       if (!captures.length || captures.at(-1).y !== actualY) captures.push({y: actualY, dataUrl});
-      setCaptureProgress(true, `Capturing section ${captures.length}${infiniteScrollDetected ? ` of ${INFINITE_SCROLL_CAPTURES}` : ''}…`);
+      setCaptureProgress(true, `Capturing section ${captures.length} of ${MAX_CAPTURED_SECTIONS}…`);
 
       // Keep navigation visible at the top of the exported page, then prevent repetition.
       if (captures.length === 1) {
@@ -120,14 +116,11 @@ async function captureCurrentPage(format) {
       }
 
       // Infinite/lazy pages may grow while we scroll; refresh its real height.
-      // Give lazy-rendered footers one extra layout turn before deciding that we are done.
-      await new Promise((resolve) => setTimeout(resolve, CAPTURE_DELAY_MS));
+      // The scroll step already waited 550ms before capture, so avoid a second full delay.
       if (captureCancelRequested) throw new Error('Capture cancelled.');
       const currentHeight = await runInTab(tab.id, () => Math.max(
         document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0,
       ));
-      growthStreak = currentHeight > metrics.height + 20 ? growthStreak + 1 : 0;
-      if (growthStreak >= 3) infiniteScrollDetected = true;
       metrics.height = Math.max(metrics.height, currentHeight);
       targetY = Math.min(actualY + metrics.viewportHeight, Math.max(0, metrics.height - metrics.viewportHeight));
       reachedBottomOnce = targetY === actualY;
@@ -148,12 +141,12 @@ async function captureCurrentPage(format) {
   if (format === 'png' || format === 'webp') {
     await downloadImage(captures, metrics, tab.title, format);
     return partialCapture
-      ? `${format.toUpperCase()} downloaded (first ${INFINITE_SCROLL_CAPTURES} loaded sections).`
+      ? `${format.toUpperCase()} downloaded (first ${MAX_CAPTURED_SECTIONS} loaded sections).`
       : `${format.toUpperCase()} downloaded.`;
   }
   await downloadPdf(captures, metrics, tab.title);
   return partialCapture
-    ? `PDF downloaded (first ${INFINITE_SCROLL_CAPTURES} loaded sections).`
+    ? `PDF downloaded (first ${MAX_CAPTURED_SECTIONS} loaded sections).`
     : 'PDF downloaded.';
 }
 

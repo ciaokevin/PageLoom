@@ -99,7 +99,7 @@ PageLoom does not request broad host permissions such as `<all_urls>`.
 
 - Chrome internal pages such as `chrome://`, the Chrome Web Store, and some protected pages cannot be captured due to browser security restrictions.
 - Continuously changing page content can affect capture alignment.
-- When a page continues growing (for example, an infinite-scroll feed), PageLoom captures the first 50 loaded viewports and finishes normally. You can also cancel an active capture from the popup.
+- PageLoom captures up to 50 loaded viewports per export, preventing infinite or virtualized feeds from running indefinitely. Longer pages are saved as the currently loaded portion. You can also cancel an active capture from the popup.
 - Chrome's **Ask where to save each file before downloading** setting may still show a system save dialog. Disable it in `chrome://settings/downloads` for automatic saving.
 
 ## Project structure
