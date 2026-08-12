@@ -7,6 +7,7 @@ const MAX_WEBP_HEIGHT = 16_000;
 // A hard cap keeps infinite or virtualized feeds (such as social timelines) responsive.
 // Pages longer than this are exported as their currently loaded portion.
 const MAX_CAPTURED_SECTIONS = 50;
+const BOTTOM_SETTLE_DELAY_MS = 1_200;
 let captureInProgress = false;
 let captureCancelRequested = false;
 let captureProgress = {active: false, message: ''};
@@ -115,8 +116,15 @@ async function captureCurrentPage(format) {
         }, [hideToken]);
       }
 
-      // Infinite/lazy pages may grow while we scroll; refresh its real height.
-      // The scroll step already waited 550ms before capture, so avoid a second full delay.
+      // Feeds such as Threads often append their next batch only after reaching the
+      // apparent bottom. Give that boundary a short settle window before concluding.
+      const wasAtBottom = actualY >= Math.max(0, metrics.height - metrics.viewportHeight);
+      if (wasAtBottom) {
+        setCaptureProgress(true, 'Loading more content…');
+        await new Promise((resolve) => setTimeout(resolve, BOTTOM_SETTLE_DELAY_MS));
+      }
+
+      // Infinite/lazy pages may grow while we scroll; refresh their real height.
       if (captureCancelRequested) throw new Error('Capture cancelled.');
       const currentHeight = await runInTab(tab.id, () => Math.max(
         document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0,
