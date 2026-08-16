@@ -5,7 +5,11 @@ const MAX_PNG_HEIGHT = 32_700;
 // Pages longer than this are exported as their currently loaded portion.
 const MAX_CAPTURED_SECTIONS = 50;
 const BOTTOM_SETTLE_DELAY_MS = 1_200;
-const MAX_BOTTOM_LOAD_RETRIES = 5;
+// PDFs embed a JPEG so standard viewers can render a single long page efficiently.
+// Favor crisp glyph edges over file size, especially for Korean and other dense text.
+const PDF_JPEG_QUALITY = 0.98;
+// At browser zoom levels the maximum scroll position may be rounded by a pixel.
+const SCROLL_POSITION_TOLERANCE_PX = 2;
 let captureInProgress = false;
 let captureCancelRequested = false;
 let captureProgress = {active: false, message: ''};
@@ -59,7 +63,6 @@ async function captureCurrentPage(format) {
   const captures = [];
   const hideToken = `full-page-capture-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let partialCapture = false;
-  let bottomLoadRetries = 0;
 
   try {
     // Do this before measuring: hiding the scrollbar can slightly change viewport width.
@@ -117,17 +120,11 @@ async function captureCurrentPage(format) {
 
       // Feeds such as Threads often append their next batch only after reaching the
       // apparent bottom. Give that boundary a short settle window before concluding.
-      const wasAtBottom = actualY >= Math.max(0, metrics.height - metrics.viewportHeight);
+      const bottomY = Math.max(0, metrics.height - metrics.viewportHeight);
+      const wasAtBottom = actualY >= bottomY - SCROLL_POSITION_TOLERANCE_PX;
       if (wasAtBottom) {
         setCaptureProgress(true, 'Loading more content…');
-        // Some virtualized feeds only request their next batch after a fresh scroll event
-        // at the boundary. Nudge the viewport and return to the bottom to trigger it.
-        await runInTab(tab.id, async (y, delay) => {
-          window.scrollTo(0, Math.max(0, y - 2));
-          await new Promise((resolve) => setTimeout(resolve, 80));
-          window.scrollTo(0, y);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }, [actualY, BOTTOM_SETTLE_DELAY_MS]);
+        await new Promise((resolve) => setTimeout(resolve, BOTTOM_SETTLE_DELAY_MS));
       }
 
       // Infinite/lazy pages may grow while we scroll; refresh their real height.
@@ -135,13 +132,12 @@ async function captureCurrentPage(format) {
       const currentHeight = await runInTab(tab.id, () => Math.max(
         document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0,
       ));
-      const loadedMoreContent = currentHeight > metrics.height + 20;
-      bottomLoadRetries = wasAtBottom && !loadedMoreContent ? bottomLoadRetries + 1 : 0;
       metrics.height = Math.max(metrics.height, currentHeight);
       targetY = Math.min(actualY + metrics.viewportHeight, Math.max(0, metrics.height - metrics.viewportHeight));
-      // Do not stop at the first apparent bottom: dynamic feeds need a few chances to
-      // append their next batch. Static pages still finish after the retry window.
-      reachedBottomOnce = targetY === actualY && bottomLoadRetries >= MAX_BOTTOM_LOAD_RETRIES;
+      // Do not request the same rounded scroll position indefinitely. This commonly
+      // happens at the last tile when a page is zoomed or uses fractional layout.
+      reachedBottomOnce = targetY <= actualY + SCROLL_POSITION_TOLERANCE_PX
+        || Math.abs(targetY - previousY) <= SCROLL_POSITION_TOLERANCE_PX;
     }
   } finally {
     // Never leave the user at the bottom of their page, including after a failure.
@@ -182,15 +178,13 @@ async function decodeImage(dataUrl) {
 async function downloadImage(captures, metrics, title, format) {
   const first = await decodeImage(captures[0].dataUrl);
   const scale = first.width / metrics.viewportWidth;
-  // Virtualized feeds can report a scrollHeight far beyond the content actually rendered.
-  // Never downscale a capture to accommodate unvisited virtual space: use the real extent
-  // of the screenshots we collected, capped at the document height for ordinary pages.
+  // Virtualized pages can report a scrollHeight far larger than the pixels we actually
+  // captured. Using that value would shrink every screenshot until text is unreadable.
   const totalHeight = getCapturedPixelHeight(captures, metrics, scale, first.height);
   const baseName = safeFileName(title || 'full-page');
 
-  if (format === 'webp') {
-    // Do not shrink text-heavy captures to force them into one tall WebP. Instead,
-    // export native-resolution segments whenever the browser canvas limit is reached.
+  if (format === 'webp' || format === 'png') {
+    // Split long captures instead of reducing their native resolution.
     const chunks = Math.ceil(totalHeight / MAX_PNG_HEIGHT);
     try {
       for (let index = 0; index < chunks; index += 1) {
@@ -204,73 +198,52 @@ async function downloadImage(captures, metrics, title, format) {
           if (y < height && y + image.height > 0) context.drawImage(image, 0, y);
           if (image !== first) image.close();
         }
-        const dataUrl = await blobToDataUrl(await canvas.convertToBlob({type: 'image/webp', quality: 0.92}));
+        const options = format === 'webp'
+          ? {type: 'image/webp', quality: 0.98}
+          : {type: 'image/png'};
+        const dataUrl = await blobToDataUrl(await canvas.convertToBlob(options));
         const suffix = chunks > 1 ? `-${index + 1}` : '';
-        await chrome.downloads.download({url: dataUrl, filename: `${baseName}${suffix}.webp`, saveAs: false});
+        await chrome.downloads.download({url: dataUrl, filename: `${baseName}${suffix}.${format}`, saveAs: false});
       }
     } finally {
       first.close();
     }
     return chunks;
   }
-
-  // A PNG must be a single canvas. Downscale only when the page exceeds Chromium's
-  // maximum canvas height; PDF remains available when the original resolution matters.
-  const outputScale = Math.min(1, MAX_PNG_HEIGHT / totalHeight);
-  const outputWidth = Math.max(1, Math.round(first.width * outputScale));
-  const outputHeight = Math.max(1, Math.round(totalHeight * outputScale));
-
-  try {
-    const canvas = new OffscreenCanvas(outputWidth, outputHeight);
-    const context = canvas.getContext('2d');
-    for (const capture of captures) {
-      const image = capture === captures[0] ? first : await decodeImage(capture.dataUrl);
-      const y = Math.round(capture.y * scale * outputScale);
-      const imageHeight = Math.round(image.height * outputScale);
-      if (y < outputHeight && y + imageHeight > 0) {
-        context.drawImage(image, 0, y, outputWidth, imageHeight);
-      }
-      if (image !== first) image.close();
-    }
-    const dataUrl = await blobToDataUrl(await canvas.convertToBlob({type: 'image/png'}));
-    await chrome.downloads.download({url: dataUrl, filename: `${baseName}.${format}`, saveAs: false});
-  } finally {
-    first.close();
-  }
-  return 1;
 }
 
 async function downloadPdf(captures, metrics, title) {
   const first = await decodeImage(captures[0].dataUrl);
   const scale = first.width / metrics.viewportWidth;
   const fullHeight = getCapturedPixelHeight(captures, metrics, scale, first.height);
-  const outputScale = Math.min(1, MAX_PNG_HEIGHT / fullHeight);
-  const outputWidth = Math.max(1, Math.round(first.width * outputScale));
-  const outputHeight = Math.max(1, Math.round(fullHeight * outputScale));
-
-  let jpeg;
+  const pages = [];
   try {
-    const canvas = new OffscreenCanvas(outputWidth, outputHeight);
-    const context = canvas.getContext('2d');
-    for (const capture of captures) {
-      const image = capture === captures[0] ? first : await decodeImage(capture.dataUrl);
-      const y = Math.round(capture.y * scale * outputScale);
-      const imageHeight = Math.round(image.height * outputScale);
-      if (y < outputHeight && y + imageHeight > 0) {
-        context.drawImage(image, 0, y, outputWidth, imageHeight);
+    const chunks = Math.ceil(fullHeight / MAX_PNG_HEIGHT);
+    for (let index = 0; index < chunks; index += 1) {
+      const start = index * MAX_PNG_HEIGHT;
+      const height = Math.min(MAX_PNG_HEIGHT, fullHeight - start);
+      const canvas = new OffscreenCanvas(first.width, height);
+      const context = canvas.getContext('2d');
+      for (const capture of captures) {
+        const image = capture === captures[0] ? first : await decodeImage(capture.dataUrl);
+        const y = Math.round(capture.y * scale) - start;
+        if (y < height && y + image.height > 0) context.drawImage(image, 0, y);
+        if (image !== first) image.close();
       }
-      if (image !== first) image.close();
+      const jpeg = new Uint8Array(await (await canvas.convertToBlob({
+        type: 'image/jpeg', quality: PDF_JPEG_QUALITY,
+      })).arrayBuffer());
+      pages.push({width: first.width, height, jpeg});
     }
-    jpeg = new Uint8Array(await (await canvas.convertToBlob({type: 'image/jpeg', quality: 0.85})).arrayBuffer());
   } finally {
     first.close();
   }
 
-  const dataUrl = await blobToDataUrl(new Blob([makePdf([{width: outputWidth, height: outputHeight, jpeg}])], {type: 'application/pdf'}));
+  const dataUrl = await blobToDataUrl(new Blob([makePdf(pages)], {type: 'application/pdf'}));
   await chrome.downloads.download({url: dataUrl, filename: `${safeFileName(title || 'full-page')}.pdf`, saveAs: false});
 }
 
-// A small, dependency-free PDF writer. The complete page is one PDF page.
+// A small, dependency-free PDF writer. Long captures use multiple PDF pages.
 function makePdf(pages) {
   const encoder = new TextEncoder();
   const parts = [];

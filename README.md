@@ -7,7 +7,7 @@
 <p align="center"><strong>Capture every scroll. Keep every detail.</strong></p>
 
 <p align="center">
-  A lightweight Chrome extension that saves the complete current web page as one continuous PNG or PDF.
+  A lightweight Chrome extension that saves the complete current web page as a high-resolution PNG, WebP, or PDF.
 </p>
 
 <p align="center">
@@ -32,17 +32,17 @@
 
 ## Capture the whole story
 
-PageLoom scrolls through the active tab, stitches every viewport together, and downloads the result as one continuous image or document. No account, analytics, or cloud processing required.
+PageLoom scrolls through the active tab, stitches every viewport together, and downloads the result locally. No account, analytics, or cloud processing required.
 
 | PNG image | WebP image | PDF document |
 | --- | --- | --- |
-| Lossless quality for design review and archival. | Sharp, compact output for long text-heavy pages. | A portable, single-page record of a long page. |
-| Largest file size. | Very long pages are split into native-resolution WebP files. | JPEG-compressed to balance quality and size. |
+| Lossless quality for design review and archival. | Compact image output with excellent visual quality. | A portable, single-page record of a long page. |
+| Lossless; exceptionally long captures are numbered into multiple files. | Best choice when file size matters; long captures are numbered into multiple files. | High-quality JPEG pages for crisp text; long captures use multiple PDF pages. |
 
 ## Features
 
 - **Full-page capture** — captures the entire active page, not only what is visible.
-- **Three output formats** — download a lossless PNG, sharp native-resolution WebP segments, or a single continuous PDF page.
+- **Three output formats** — download lossless PNG files, compact WebP files, or a high-quality PDF.
 - **Clean stitching** — keeps the header in the first viewport while preventing fixed and sticky UI from repeating further down.
 - **Footer-aware** — waits for lazy-loaded content and page footers before completing the capture.
 - **State restoration** — restores scrollbars, fixed UI, and the original scroll position after capture.
@@ -75,7 +75,7 @@ Restore the page and download one PNG or PDF
 
 ## Long pages
 
-Browsers impose maximum canvas and PDF page dimensions. PNG and PDF are proportionally downscaled when necessary to stay in one output file/page. WebP preserves native text sharpness by splitting exceptionally tall pages into numbered WebP files instead of downscaling them.
+Browsers impose maximum canvas and PDF page dimensions. To preserve readable native-resolution text, PageLoom splits exceptionally tall PNG and WebP captures into numbered files, and creates multiple PDF pages when necessary.
 
 ## Permissions
 
@@ -99,7 +99,7 @@ PageLoom does not request broad host permissions such as `<all_urls>`.
 
 - Chrome internal pages such as `chrome://`, the Chrome Web Store, and some protected pages cannot be captured due to browser security restrictions.
 - Continuously changing page content can affect capture alignment.
-- PageLoom captures up to 50 loaded viewports per export, preventing infinite or virtualized feeds from running indefinitely. At an apparent feed boundary, it retries loading several times before finishing. Longer pages are saved as the currently loaded portion. You can also cancel an active capture from the popup.
+- PageLoom captures up to 50 loaded viewports per export, preventing infinite or virtualized feeds from running indefinitely. Longer pages are saved as the currently loaded portion. You can also cancel an active capture from the popup.
 - Chrome's **Ask where to save each file before downloading** setting may still show a system save dialog. Disable it in `chrome://settings/downloads` for automatic saving.
 
 ## Project structure
